@@ -18,7 +18,7 @@ pub const backend = switch (@import("zgui_options").backend) {
     .win32_dx12 => @import("backend_win32_dx12.zig"),
     .sdl2_opengl3 => @import("backend_sdl2_opengl.zig"),
     .osx_metal => @import("backend_osx_metal.zig"),
-    .sdl2 => @import("backend_sdl2.zig"),
+    .sdl3_gpu => @import("backend_sdl3_gpu.zig"),
     .no_backend => .{},
 };
 const te_enabled = @import("zgui_options").with_te;
@@ -1679,7 +1679,7 @@ const ImageButton = struct {
 pub fn imageButton(str_id: [:0]const u8, user_texture_id: TextureIdent, args: ImageButton) bool {
     return zguiImageButton(
         str_id,
-        user_texture_id,
+        @intFromPtr(user_texture_id),
         args.w,
         args.h,
         &args.uv0,
@@ -1690,7 +1690,7 @@ pub fn imageButton(str_id: [:0]const u8, user_texture_id: TextureIdent, args: Im
 }
 extern fn zguiImageButton(
     str_id: [*:0]const u8,
-    user_texture_id: TextureIdent,
+    user_texture_id: u64,
     w: f32,
     h: f32,
     uv0: *const [2]f32,
@@ -3854,6 +3854,8 @@ pub const DrawCmd = extern struct {
     elem_count: c_uint,
     user_callback: ?DrawCallback,
     user_callback_data: ?*anyopaque,
+    user_callback_data_size: c_int,
+    user_callback_data_offset: c_int,
 };
 
 pub const DrawCallback = *const fn (*const anyopaque, *const DrawCmd) callconv(.C) void;
