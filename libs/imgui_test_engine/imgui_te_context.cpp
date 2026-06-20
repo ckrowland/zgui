@@ -19,16 +19,6 @@
 #include "imgui_te_utils.h"
 #include "thirdparty/Str/Str.h"
 
-// Warnings
-#if defined(__clang__)
-#if __has_warning("-Wunknown-warning-option")
-#pragma clang diagnostic ignored "-Wunknown-warning-option"         // warning: unknown warning group 'xxx'                      // not all warnings are known by all Clang versions and they tend to be rename-happy.. so ignoring warnings triggers new warnings on some configuration. Great!
-#endif
-#pragma clang diagnostic ignored "-Wsign-conversion"                // warning: implicit conversion changes signedness
-#elif defined(__GNUC__)
-#pragma GCC diagnostic ignored "-Wsign-conversion"                  // warning: conversion to 'xxxx' from 'xxxx' may change the sign of the result
-#endif
-
 //-------------------------------------------------------------------------
 // [SECTION] ImGuiTestRefDesc
 //-------------------------------------------------------------------------
@@ -36,21 +26,21 @@
 ImGuiTestRefDesc::ImGuiTestRefDesc(const ImGuiTestRef& ref)
 {
     if (ref.Path && ref.ID != 0)
-        ImFormatString(Buf, IM_COUNTOF(Buf), "'%s' (id 0x%08X)", ref.Path, ref.ID);
+        ImFormatString(Buf, IM_ARRAYSIZE(Buf), "'%s' (id 0x%08X)", ref.Path, ref.ID);
     else if (ref.Path)
-        ImFormatString(Buf, IM_COUNTOF(Buf), "'%s'", ref.Path);
+        ImFormatString(Buf, IM_ARRAYSIZE(Buf), "'%s'", ref.Path);
     else
-        ImFormatString(Buf, IM_COUNTOF(Buf), "0x%08X", ref.ID);
+        ImFormatString(Buf, IM_ARRAYSIZE(Buf), "0x%08X", ref.ID);
 }
 
 ImGuiTestRefDesc::ImGuiTestRefDesc(const ImGuiTestRef& ref, const ImGuiTestItemInfo& item)
 {
     if (ref.Path && item.ID != 0)
-        ImFormatString(Buf, IM_COUNTOF(Buf), "'%s' (id 0x%08X)", ref.Path, item.ID);
+        ImFormatString(Buf, IM_ARRAYSIZE(Buf), "'%s' (id 0x%08X)", ref.Path, item.ID);
     else if (ref.Path)
-        ImFormatString(Buf, IM_COUNTOF(Buf), "'%s'", ref.Path);
+        ImFormatString(Buf, IM_ARRAYSIZE(Buf), "'%s'", ref.Path);
     else
-        ImFormatString(Buf, IM_COUNTOF(Buf), "0x%08X (label \"%s\")", ref.ID, item.DebugLabel);
+        ImFormatString(Buf, IM_ARRAYSIZE(Buf), "0x%08X (label \"%s\")", ref.ID, item.DebugLabel);
 }
 
 //-------------------------------------------------------------------------
@@ -156,14 +146,8 @@ void    ImGuiTestContext::LogExV(ImGuiTestVerboseLevel level, ImGuiTestLogFlags 
     log->Buffer.append("\n");
 
     log->UpdateLineOffsets(EngineIO, level, log->Buffer.begin() + prev_size);
-
-    const char* output_raw = log->Buffer.c_str() + prev_size;
-    if (EngineIO->ConfigLogToTTY)
-        LogToTTY(level, output_raw);
-    if (EngineIO->ConfigLogToDebugger)
-        LogToDebugger(level, output_raw);
-    if (EngineIO->ConfigLogToFunc)
-        EngineIO->ConfigLogToFunc(Engine, this, level, output_raw, EngineIO->ConfigLogToFuncUserData);
+    LogToTTY(level, log->Buffer.c_str() + prev_size);
+    LogToDebugger(level, log->Buffer.c_str() + prev_size);
 }
 
 void    ImGuiTestContext::LogDebug(const char* fmt, ...)
@@ -313,7 +297,7 @@ void    ImGuiTestContext::Finish(ImGuiTestStatus status)
 {
     if (ActiveFunc == ImGuiTestActiveFunc_GuiFunc)
     {
-        IM_ASSERT(status == ImGuiTestStatus_Success || status == ImGuiTestStatus_Unknown); // Use IM_CHECK(false) or IM_CHECK(some_express) to set an error
+        IM_ASSERT(status == ImGuiTestStatus_Success || status == ImGuiTestStatus_Unknown);
         if (RunFlags & ImGuiTestRunFlags_GuiFuncOnly)
             return;
         if (TestOutput->Status == ImGuiTestStatus_Running)
@@ -324,10 +308,6 @@ void    ImGuiTestContext::Finish(ImGuiTestStatus status)
         IM_ASSERT(status == ImGuiTestStatus_Unknown); // To set Success from a TestFunc() you can 'return' from it.
         if (TestOutput->Status == ImGuiTestStatus_Running)
             TestOutput->Status = status;
-    }
-    else if (ActiveFunc == ImGuiTestActiveFunc_TeardownFunc)
-    {
-        IM_ASSERT(0); // Unsupported
     }
 }
 
@@ -464,22 +444,10 @@ void    ImGuiTestContext::SleepStandard()
         Sleep(EngineIO->ActionDelayStandard);
 }
 
-static const char* GetInputSourceName(ImGuiInputSource input_mode)
-{
-    switch (input_mode)
-    {
-    case ImGuiInputSource_None:     return "None";
-    case ImGuiInputSource_Mouse:    return "Mouse";
-    case ImGuiInputSource_Keyboard: return "Keyboard";
-    case ImGuiInputSource_Gamepad:  return "Gamepad";
-    default: return "n/a";
-    }
-}
-
 void ImGuiTestContext::SetInputMode(ImGuiInputSource input_mode)
 {
     IMGUI_TEST_CONTEXT_REGISTER_DEPTH(this);
-    LogDebug("SetInputMode '%s'", GetInputSourceName(input_mode));
+    LogDebug("SetInputMode %d", input_mode);
 
     IM_ASSERT(input_mode == ImGuiInputSource_Mouse || input_mode == ImGuiInputSource_Keyboard || input_mode == ImGuiInputSource_Gamepad);
     InputMode = input_mode;
@@ -515,8 +483,7 @@ void ImGuiTestContext::SetRef(ImGuiWindow* window)
 
     // We grab the ID directly and avoid ImHashDecoratedPath so "/" in window names are not ignored.
     size_t len = strlen(window->Name);
-    IM_UNUSED(len); // Only used when IM_ASSERT enabled
-    IM_ASSERT(len < IM_COUNTOF(RefStr) - 1);
+    IM_ASSERT(len < IM_ARRAYSIZE(RefStr) - 1);
     strcpy(RefStr, window->Name);
     RefID = RefWindowID = window->ID;
 
@@ -532,14 +499,13 @@ void ImGuiTestContext::SetRef(ImGuiWindow* window)
 void ImGuiTestContext::SetRef(ImGuiTestRef ref)
 {
     IMGUI_TEST_CONTEXT_REGISTER_DEPTH(this);
-    if (ActiveFunc != ImGuiTestActiveFunc_GuiFunc)
+    if (ActiveFunc == ImGuiTestActiveFunc_TestFunc)
         LogDebug("SetRef '%s' 0x%08X", ref.Path ? ref.Path : "nullptr", ref.ID);
 
     if (ref.Path)
     {
         size_t len = strlen(ref.Path);
-        IM_UNUSED(len); // Only used when IM_ASSERT enabled
-        IM_ASSERT(len < IM_COUNTOF(RefStr) - 1);
+        IM_ASSERT(len < IM_ARRAYSIZE(RefStr) - 1);
 
         strcpy(RefStr, ref.Path);
         RefID = GetID(ref.Path, ImGuiTestRef());
@@ -816,7 +782,7 @@ void ImGuiTestContext::CaptureSetExtension(const char* ext)
     ImGuiCaptureArgs* args = CaptureArgs;
     if (args->InOutputFile[0] == 0)
     {
-        ImFormatString(args->InOutputFile, IM_COUNTOF(args->InOutputFile), "output/captures/%s_%04d%s", Test->Name, CaptureCounter, ext);
+        ImFormatString(args->InOutputFile, IM_ARRAYSIZE(args->InOutputFile), "output/captures/%s_%04d%s", Test->Name, CaptureCounter, ext);
         CaptureCounter++;
     }
     else
@@ -970,9 +936,6 @@ static void ItemInfoErrorLog(ImGuiTestContext* ctx, ImGuiTestRef ref, ImGuiID fu
     if (flags & ImGuiTestOpFlags_NoError)
         return;
 
-    if (ctx->Engine->UiContextHasHooks == false)
-        IM_ERRORF_NOHDR("%s", "IMGUI DOES NOT SEEM COMPILED WITH '#define IMGUI_ENABLE_TEST_ENGINE'!\nMAKE SURE THAT BOTH 'imgui' AND 'imgui_test_engine' ARE USING THE SAME 'imconfig' FILE.");
-
     // Prefixing the string with / ignore the reference/current ID
     Str256 msg;
     if (ref.Path && ref.Path[0] == '/' && ctx->RefStr[0] != 0)
@@ -998,7 +961,6 @@ ImGuiTestItemInfo ImGuiTestContext::ItemInfo(ImGuiTestRef ref, ImGuiTestOpFlags 
         return ItemInfoNull();
 
     const ImGuiTestOpFlags SUPPORTED_FLAGS = ImGuiTestOpFlags_NoError;
-    IM_UNUSED(SUPPORTED_FLAGS); // Only used when IM_ASSERT enabled
     IM_ASSERT((flags & ~SUPPORTED_FLAGS) == 0);
 
     ImGuiID full_id = 0;
@@ -1263,9 +1225,6 @@ void    ImGuiTestContext::ScrollToTop(ImGuiTestRef ref)
     if (IsError())
         return;
 
-    IMGUI_TEST_CONTEXT_REGISTER_DEPTH(this);
-    LogDebug("ScrollToTop");
-
     ImGuiWindow* window = GetWindowByRef(ref);
     IM_CHECK_SILENT(window != nullptr);
     if (window->Scroll.y == 0.0f)
@@ -1279,9 +1238,6 @@ void    ImGuiTestContext::ScrollToBottom(ImGuiTestRef ref)
     if (IsError())
         return;
 
-    IMGUI_TEST_CONTEXT_REGISTER_DEPTH(this);
-    LogDebug("ScrollToBottom");
-
     ImGuiWindow* window = GetWindowByRef(ref);
     IM_CHECK_SILENT(window != nullptr);
     if (window->Scroll.y == window->ScrollMax.y)
@@ -1290,9 +1246,9 @@ void    ImGuiTestContext::ScrollToBottom(ImGuiTestRef ref)
     Yield();
 }
 
-bool    ScrollErrorCheck(ImGuiTestContext* ctx, ImGuiAxis axis, float expected, float actual, int* remaining_attempts)
+bool    ImGuiTestContext::ScrollErrorCheck(ImGuiAxis axis, float expected, float actual, int* remaining_attempts)
 {
-    if (ctx->IsError())
+    if (IsError())
     {
         (*remaining_attempts)--;
         return false;
@@ -1305,7 +1261,7 @@ bool    ScrollErrorCheck(ImGuiTestContext* ctx, ImGuiAxis axis, float expected, 
     (*remaining_attempts)--;
     if (*remaining_attempts > 0)
     {
-        ctx->LogInfo("Failed to set Scroll%c. Requested %.2f, got %.2f. Will try again.", 'X' + axis, expected, actual);
+        LogInfo("Failed to set Scroll%c. Requested %.2f, got %.2f. Will try again.", 'X' + axis, expected, actual);
         return true;
     }
     else
@@ -1448,57 +1404,13 @@ void    ImGuiTestContext::ScrollTo(ImGuiTestRef ref, ImGuiAxis axis, float scrol
 
         // Error handling to avoid getting stuck in this function.
         Yield();
-        if (!ScrollErrorCheck(this, axis, scroll_next, window->Scroll[axis], &remaining_failures))
+        if (!ScrollErrorCheck(axis, scroll_next, window->Scroll[axis], &remaining_failures))
             break;
     }
 
     // Need another frame for the result->Rect to stabilize
     Yield();
 }
-
-// Supported values for ImGuiTestOpFlags:
-// - ImGuiTestOpFlags_NoFocusWindow
-void    ImGuiTestContext::ScrollToPos(ImGuiTestRef window_ref, float pos_v, ImGuiAxis axis, ImGuiTestOpFlags flags)
-{
-    if (IsError())
-        return;
-
-    IMGUI_TEST_CONTEXT_REGISTER_DEPTH(this);
-    LogDebug("ScrollToPos %c %.2f", 'X' + axis, pos_v);
-
-    // Ensure window size and ScrollMax are up-to-date
-    Yield();
-
-    ImGuiWindow* window = GetWindowByRef(window_ref);
-    IM_CHECK_SILENT(window != NULL);
-    float item_curr = pos_v;
-    float item_target = ImFloor(window->InnerClipRect.GetCenter()[axis]);
-    float scroll_delta = item_target - item_curr;
-    float scroll_target = ImClamp(window->Scroll[axis] - scroll_delta, 0.0f, window->ScrollMax[axis]);
-
-    ScrollTo(window->ID, axis, scroll_target, (flags & ImGuiTestOpFlags_NoFocusWindow));
-}
-
-void    ImGuiTestContext::ScrollToPosX(ImGuiTestRef window_ref, float pos_x)
-{
-    ScrollToPos(window_ref, pos_x, ImGuiAxis_X);
-}
-
-void    ImGuiTestContext::ScrollToPosY(ImGuiTestRef window_ref, float pos_y)
-{
-    ScrollToPos(window_ref, pos_y, ImGuiAxis_Y);
-}
-
-#if IMGUI_VERSION_NUM < 19226
-namespace ImGui
-{
-    ImGuiTabBar* TabBarFindByID(ImGuiID id)
-    {
-        ImGuiContext& g = *GImGui;
-        return g.TabBars.GetByKey(id);
-    }
-}
-#endif
 
 // Supported values for ImGuiTestOpFlags:
 // - ImGuiTestOpFlags_NoFocusWindow
@@ -1521,28 +1433,15 @@ void    ImGuiTestContext::ScrollToItem(ImGuiTestRef ref, ImGuiAxis axis, ImGuiTe
 
     // TabBar are a special case because they have no scrollbar and rely on ScrollButton "<" and ">"
     // FIXME-TESTS: Consider moving to its own function.
+    ImGuiContext& g = *UiContext;
     if (axis == ImGuiAxis_X)
-    {
-        ImGuiTabBar* tab_bar = ImGui::TabBarFindByID(item.ParentID);
-#ifdef IMGUI_HAS_DOCK
-        if (tab_bar == NULL)
-            if (ImGuiDockNode* node = ImGui::DockContextFindNodeByID(UiContext, item.ParentID))
-                if (node->TabBar != NULL)
-                    tab_bar = node->TabBar;
-#endif
-        if (tab_bar)
-            if (tab_bar->Flags & (ImGuiTabBarFlags_FittingPolicyScroll | ImGuiTabBarFlags_FittingPolicyMixed))
+        if (ImGuiTabBar* tab_bar = g.TabBars.GetByKey(item.ParentID))
+            if (tab_bar->Flags & ImGuiTabBarFlags_FittingPolicyScroll)
             {
                 ScrollToTabItem(tab_bar, item.ID);
                 return;
             }
-    }
 
-    // Unsupported beyond tab bars
-    if (item.NavLayer == ImGuiNavLayer_Menu)
-        return;
-
-    // FIXME: Consider storing current ClipRect
     ImGuiWindow* window = item.Window;
     float item_curr = ImFloor(item.RectFull.GetCenter()[axis]);
     float item_target = ImFloor(window->InnerClipRect.GetCenter()[axis]);
@@ -1577,52 +1476,30 @@ void    ImGuiTestContext::ScrollToTabItem(ImGuiTabBar* tab_bar, ImGuiID tab_id)
     if (target_tab_item == nullptr)
         return;
 
-    const int selected_tab_index = tab_bar->Tabs.index_from_ptr(selected_tab_item);
-    const int target_tab_index = tab_bar->Tabs.index_from_ptr(target_tab_item);
-    if (selected_tab_index == target_tab_index)
-        return;
+    int selected_tab_index = tab_bar->Tabs.index_from_ptr(selected_tab_item);
+    int target_tab_index = tab_bar->Tabs.index_from_ptr(target_tab_item);
 
     ImGuiTestRef backup_ref = GetRef();
     SetRef(tab_bar->ID);
 
-#if IMGUI_VERSION_NUM >= 19259
-    ImGuiID active_id = ImGui::GetActiveID();
-    if (active_id != 0 || ImGui::IsDragDropActive() || selected_tab_index == target_tab_index)
+    if (selected_tab_index > target_tab_index)
     {
-        // Cannot click: will use mouse wheeling
-        // FIXME-TESTS: Taking a shortcut now instead of doing a mouse wheel.
-        //MouseMoveToPos(tab_bar->BarRect.GetCenter());
-        //MouseWheelX(delta?);
-        tab_bar->NextScrollToTabId = tab_id;
+        MouseMove("##<");
+        for (int i = 0; i < selected_tab_index - target_tab_index; ++i)
+            MouseClick(0);
     }
     else
-#endif
     {
-        if (selected_tab_index > target_tab_index)
-        {
-            MouseMove("##<");
-            for (int i = 0; i < selected_tab_index - target_tab_index; ++i)
-                MouseClick(0);
-        }
-        else
-        {
-            MouseMove("##>");
-            for (int i = 0; i < target_tab_index - selected_tab_index; ++i)
-                MouseClick(0);
-        }
+        MouseMove("##>");
+        for (int i = 0; i < target_tab_index - selected_tab_index; ++i)
+            MouseClick(0);
     }
 
     // Skip the scroll animation
-    Yield();
     if (EngineIO->ConfigRunSpeed == ImGuiTestRunSpeed_Fast)
     {
         tab_bar->ScrollingAnim = tab_bar->ScrollingTarget;
         Yield();
-    }
-    else
-    {
-        while (tab_bar->ScrollingAnim != tab_bar->ScrollingTarget)
-            Yield();
     }
 
     SetRef(backup_ref);
@@ -1635,7 +1512,7 @@ void    ImGuiTestContext::ScrollToTabItem(ImGuiTabBar* tab_bar, ImGuiID tab_id)
 // - One of the net visible effect of an unstable ScrollMax is that the End key would put you at a spot that's not exactly the lowest spot,
 //   and so a second press to End would you move again by a few pixels.
 // FIXME-TESTS: Make this an iterative, smooth scroll.
-void    ImGuiTestContext::_ScrollVerifyScrollMax(ImGuiTestRef ref)
+void    ImGuiTestContext::ScrollVerifyScrollMax(ImGuiTestRef ref)
 {
     ImGuiWindow* window = GetWindowByRef(ref);
     ImGui::SetScrollY(window, 0.0f);
@@ -1791,24 +1668,20 @@ static void FocusOrMakeClickableAtPos(ImGuiTestContext* ctx, ImGuiWindow* window
 {
     IM_ASSERT(window != nullptr);
 
-    for (int attempts = 0; attempts < 2; attempts++)
-    {
-        // Avoid unnecessary focus
-        // While this is generally desirable and much more consistent with user behavior,
-        // it make test-engine behavior a little less deterministic.
-        // incorrectly written tests could possibly succeed or fail based on position of other windows.
-        bool is_covered = ctx->FindHoveredWindowAtPos(pos) != window;
+    // Avoid unnecessary focus
+    // While this is generally desirable and much more consistent with user behavior,
+    // it make test-engine behavior a little less deterministic.
+    // incorrectly written tests could possibly succeed or fail based on position of other windows.
+    bool is_covered = ctx->FindHoveredWindowAtPos(pos) != window;
 #if IMGUI_VERSION_NUM >= 18944
-        bool is_inhibited = ImGui::IsWindowContentHoverable(window) == false;
+    bool is_inhibited = ImGui::IsWindowContentHoverable(window) == false;
 #else
-        bool is_inhibited = false;
+    bool is_inhibited = false;
 #endif
-        if (!is_covered && !is_inhibited)
-            return;
-
-        // FIXME-TESTS-NOT_SAME_AS_END_USER: This has too many side effect, could we do without?
-        // - e.g. This can close a modal.
-
+    // FIXME-TESTS-NOT_SAME_AS_END_USER: This has too many side effect, could we do without?
+    // - e.g. This can close a modal.
+    if (is_covered || is_inhibited)
+    {
         // Testing ImGuiWindowFlags_NoBringToFrontOnFocus is similar to what FocusWindow() does
         ImGuiWindow* focus_front_window = window ? window->RootWindow : nullptr;
 #ifdef IMGUI_HAS_DOCK
@@ -1816,19 +1689,14 @@ static void FocusOrMakeClickableAtPos(ImGuiTestContext* ctx, ImGuiWindow* window
 #else
         ImGuiWindow* display_front_window = window ? window->RootWindow : nullptr;
 #endif
-        const bool can_bring_to_front = ((window->Flags | focus_front_window->Flags | display_front_window->Flags) & ImGuiWindowFlags_NoBringToFrontOnFocus) == 0;
-
-        // Initially I expected to aim to make the most common path move other windows and WindowBringToFront() the exceptional path.
-        // However from a user's perspective, if a window can be moved to front it is usually more natural to do this.
-        if (attempts == 0)
+        if ((window->Flags | focus_front_window->Flags | display_front_window->Flags) & ImGuiWindowFlags_NoBringToFrontOnFocus)
         {
-            if (!can_bring_to_front)
-                continue;
-            ctx->WindowBringToFront(window->ID);
-        }
-        else if (attempts == 1)
-        {
+            // FIXME-TESTS: Aim to make it the common/default path, and WindowBringToFront() the exceptional path!
             ctx->_MakeAimingSpaceOverPos(window->Viewport, window, pos);
+        }
+        else
+        {
+            ctx->WindowBringToFront(window->ID);
         }
     }
 }
@@ -1894,24 +1762,27 @@ void    ImGuiTestContext::MouseMove(ImGuiTestRef ref, ImGuiTestOpFlags flags)
             }
         }
 
-        //ImRect window_r = window->InnerClipRect;
-        //window_r.Expand(ImVec2(-hover_padding.x, -hover_padding.y));
+        ImRect window_r = window->InnerClipRect;
+        window_r.Expand(ImVec2(-hover_padding.x, -hover_padding.y));
 
-        ImRect item_r_clipped = item.RectClipped;
-        //item_r_clipped.Min.x = ImClamp(item.RectFull.Min.x, window_r.Min.x, window_r.Max.x);
-        //item_r_clipped.Min.y = ImClamp(item.RectFull.Min.y, window_r.Min.y, window_r.Max.y);
-        //item_r_clipped.Max.x = ImClamp(item.RectFull.Max.x, window_r.Min.x, window_r.Max.x);
-        //item_r_clipped.Max.y = ImClamp(item.RectFull.Max.y, window_r.Min.y, window_r.Max.y);
+        ImRect item_r_clipped;
+        item_r_clipped.Min.x = ImClamp(item.RectFull.Min.x, window_r.Min.x, window_r.Max.x);
+        item_r_clipped.Min.y = ImClamp(item.RectFull.Min.y, window_r.Min.y, window_r.Max.y);
+        item_r_clipped.Max.x = ImClamp(item.RectFull.Max.x, window_r.Min.x, window_r.Max.x);
+        item_r_clipped.Max.y = ImClamp(item.RectFull.Max.y, window_r.Min.y, window_r.Max.y);
 
         // In theory all we need is one visible point, but it is generally nicer if we scroll toward visibility.
         // Bias toward reducing amount of horizontal scroll.
         float visibility_ratio_x = (item_r_clipped.GetWidth() + 1.0f) / (item.RectFull.GetWidth() + 1.0f);
         float visibility_ratio_y = (item_r_clipped.GetHeight() + 1.0f) / (item.RectFull.GetHeight() + 1.0f);
 
-        if (visibility_ratio_x < 0.70f)
-            ScrollToItem(ref, ImGuiAxis_X, ImGuiTestOpFlags_NoFocusWindow);
-        if (visibility_ratio_y < 0.90f)
-            ScrollToItem(ref, ImGuiAxis_Y, ImGuiTestOpFlags_NoFocusWindow);
+        if (item.NavLayer == ImGuiNavLayer_Main)
+        {
+            if (visibility_ratio_x < 0.70f)
+                ScrollToItem(ref, ImGuiAxis_X, ImGuiTestOpFlags_NoFocusWindow);
+            if (visibility_ratio_y < 0.90f)
+                ScrollToItem(ref, ImGuiAxis_Y, ImGuiTestOpFlags_NoFocusWindow);
+        }
         // FIXME: Scroll parent window
     }
 
@@ -2091,9 +1962,6 @@ bool    ImGuiTestContext::WindowTeleportToMakePosVisible(ImGuiTestRef ref, ImVec
     // itself. As a side effect this also adds support for child windows.
     window = window->RootWindowDockTree;
 #endif
-
-    if (window->Flags & ImGuiWindowFlags_NoMove)
-        return false;
 
     ImRect visible_r;
     visible_r.Min = GetMainMonitorWorkPos();
@@ -2512,7 +2380,7 @@ ImVec2   ImGuiTestContext::GetPosOnVoid(ImGuiViewport* viewport)
 
 ImVec2  ImGuiTestContext::GetWindowTitlebarPoint(ImGuiTestRef window_ref)
 {
-    // FIXME-TESTS: Need to find a -visible- click point. 'pos' may end up being outside of main viewport.
+    // FIXME-TESTS: Need to find a -visible- click point. drag_pos may end up being outside of main viewport.
     if (IsError())
         return ImVec2();
 
@@ -2523,7 +2391,7 @@ ImVec2  ImGuiTestContext::GetWindowTitlebarPoint(ImGuiTestRef window_ref)
         return ImVec2();
     }
 
-    ImVec2 pos;
+    ImVec2 drag_pos;
     for (int n = 0; n < 2; n++)
     {
 #ifdef IMGUI_HAS_DOCK
@@ -2532,7 +2400,7 @@ ImVec2  ImGuiTestContext::GetWindowTitlebarPoint(ImGuiTestRef window_ref)
             ImGuiTabBar* tab_bar = window->DockNode->TabBar;
             ImGuiTabItem* tab = ImGui::TabBarFindTabByID(tab_bar, window->TabId);
             IM_ASSERT(tab != nullptr);
-            pos = tab_bar->BarRect.Min + ImVec2(tab->Offset + tab->Width * 0.5f, tab_bar->BarRect.GetHeight() * 0.5f);
+            drag_pos = tab_bar->BarRect.Min + ImVec2(tab->Offset + tab->Width * 0.5f, tab_bar->BarRect.GetHeight() * 0.5f);
         }
         else
 #endif
@@ -2542,14 +2410,14 @@ ImVec2  ImGuiTestContext::GetWindowTitlebarPoint(ImGuiTestRef window_ref)
 #else
             const float h = window->TitleBarHeight();
 #endif
-            pos = ImFloor(window->Pos + ImVec2(window->Size.x, h) * 0.5f);
+            drag_pos = ImFloor(window->Pos + ImVec2(window->Size.x, h) * 0.5f);
         }
 
         // If we didn't have to teleport it means we can reach the position already
-        if (!WindowTeleportToMakePosVisible(window->ID, pos))
+        if (!WindowTeleportToMakePosVisible(window->ID, drag_pos))
             break;
     }
-    return pos;
+    return drag_pos;
 }
 
 // Click position which should have no windows.
@@ -2654,7 +2522,7 @@ void    ImGuiTestContext::KeyDown(ImGuiKeyChord key_chord)
     const char* chord_desc = ImGui::GetKeyChordName(key_chord);
 #else
     char chord_desc[32];
-    ImGui::GetKeyChordName(key_chord, chord_desc, IM_COUNTOF(chord_desc));
+    ImGui::GetKeyChordName(key_chord, chord_desc, IM_ARRAYSIZE(chord_desc));
 #endif
     LogDebug("KeyDown(%s)", chord_desc);
     if (EngineIO->ConfigRunSpeed == ImGuiTestRunSpeed_Cinematic)
@@ -2675,7 +2543,7 @@ void    ImGuiTestContext::KeyUp(ImGuiKeyChord key_chord)
     const char* chord_desc = ImGui::GetKeyChordName(key_chord);
 #else
     char chord_desc[32];
-    ImGui::GetKeyChordName(key_chord, chord_desc, IM_COUNTOF(chord_desc));
+    ImGui::GetKeyChordName(key_chord, chord_desc, IM_ARRAYSIZE(chord_desc));
 #endif
     LogDebug("KeyUp(%s)", chord_desc);
     if (EngineIO->ConfigRunSpeed == ImGuiTestRunSpeed_Cinematic)
@@ -2696,7 +2564,7 @@ void    ImGuiTestContext::KeyPress(ImGuiKeyChord key_chord, int count)
     const char* chord_desc = ImGui::GetKeyChordName(key_chord);
 #else
     char chord_desc[32];
-    ImGui::GetKeyChordName(key_chord, chord_desc, IM_COUNTOF(chord_desc));
+    ImGui::GetKeyChordName(key_chord, chord_desc, IM_ARRAYSIZE(chord_desc));
 #endif
     LogDebug("KeyPress(%s, %d)", chord_desc, count);
     if (EngineIO->ConfigRunSpeed == ImGuiTestRunSpeed_Cinematic)
@@ -2728,7 +2596,7 @@ void    ImGuiTestContext::KeyHold(ImGuiKeyChord key_chord, float time)
     const char* chord_desc = ImGui::GetKeyChordName(key_chord);
 #else
     char chord_desc[32];
-    ImGui::GetKeyChordName(key_chord, chord_desc, IM_COUNTOF(chord_desc));
+    ImGui::GetKeyChordName(key_chord, chord_desc, IM_ARRAYSIZE(chord_desc));
 #endif
     LogDebug("KeyHold(%s, %.2f sec)", chord_desc, time);
     if (EngineIO->ConfigRunSpeed == ImGuiTestRunSpeed_Cinematic)
@@ -2751,7 +2619,7 @@ void    ImGuiTestContext::KeySetEx(ImGuiKeyChord key_chord, bool is_down, float 
     const char* chord_desc = ImGui::GetKeyChordName(key_chord);
 #else
     char chord_desc[32];
-    ImGui::GetKeyChordName(key_chord, chord_desc, IM_COUNTOF(chord_desc));
+    ImGui::GetKeyChordName(key_chord, chord_desc, IM_ARRAYSIZE(chord_desc));
 #endif
     LogDebug("KeySetEx(%s, is_down=%d, time=%.f)", chord_desc, is_down, time);
     Inputs->Queue.push_back(ImGuiTestInput::ForKeyChord(key_chord, is_down));
@@ -3124,7 +2992,7 @@ void    ImGuiTestContext::ItemActionAll(ImGuiTestAction action, ImGuiTestRef ref
 
             if (filter && filter->MaxItemCountPerDepth != nullptr)
             {
-                if (item.Depth < IM_COUNTOF(processed_count_per_depth))
+                if (item.Depth < IM_ARRAYSIZE(processed_count_per_depth))
                 {
                     if (processed_count_per_depth[item.Depth] >= filter->MaxItemCountPerDepth[item.Depth])
                         continue;
@@ -3206,7 +3074,7 @@ void    ImGuiTestContext::ItemCloseAll(ImGuiTestRef ref_parent, int max_depth, i
 void    ImGuiTestContext::ItemInputValue(ImGuiTestRef ref, int value)
 {
     char buf[32];
-    ImFormatString(buf, IM_COUNTOF(buf), "%d", value);
+    ImFormatString(buf, IM_ARRAYSIZE(buf), "%d", value);
     ItemInput(ref);
     KeyCharsReplaceEnter(buf);
 }
@@ -3214,7 +3082,7 @@ void    ImGuiTestContext::ItemInputValue(ImGuiTestRef ref, int value)
 void    ImGuiTestContext::ItemInputValue(ImGuiTestRef ref, float value)
 {
     char buf[32];
-    ImFormatString(buf, IM_COUNTOF(buf), "%f", value);
+    ImFormatString(buf, IM_ARRAYSIZE(buf), "%f", value);
     ItemInput(ref);
     KeyCharsReplaceEnter(buf);
 }
@@ -3234,7 +3102,6 @@ bool    ImGuiTestContext::ItemReadAsScalar(ImGuiTestRef ref, ImGuiDataType data_
 
     const ImGuiDataTypeInfo* data_type_info = ImGui::DataTypeGetInfo(data_type);
     const ImGuiTestOpFlags SUPPORTED_FLAGS = ImGuiTestOpFlags_NoError;
-    IM_UNUSED(SUPPORTED_FLAGS); // Only used when IM_ASSERT enabled
     IM_ASSERT((flags & ~SUPPORTED_FLAGS) == 0);
 
     IMGUI_TEST_CONTEXT_REGISTER_DEPTH(this);
@@ -3516,7 +3383,7 @@ bool    ImGuiTestContext::TabBarCompareOrder(ImGuiTabBar* tab_bar, const char** 
 
     // Display
     char buf[256];
-    char* buf_end = buf + IM_COUNTOF(buf);
+    char* buf_end = buf + IM_ARRAYSIZE(buf);
 
     char* p = buf;
     for (int i = 0; i < tab_bar->Tabs.Size; i++)
@@ -3732,10 +3599,6 @@ void    ImGuiTestContext::ComboClick(ImGuiTestRef ref)
 
     Str128f combo_item_buf = Str128f("//%s/**/%s", popup->Name, p + 1);
     ItemClick(combo_item_buf.c_str());
-
-    // For if Combo Selectables uses ImGuiSelectableFlags_NoAutoClosePopups
-    if (GetWindowByRef("//$FOCUSED") == popup)
-        KeyPress(ImGuiKey_Enter);
 }
 
 void    ImGuiTestContext::ComboClickAll(ImGuiTestRef ref_parent)
@@ -3754,10 +3617,6 @@ void    ImGuiTestContext::ComboClickAll(ImGuiTestRef ref_parent)
             ItemClick(ref_parent);
         ItemClick(item.ID);
     }
-
-    // For if Combo Selectables uses ImGuiSelectableFlags_NoAutoClosePopups
-    if (GetWindowByRef("//$FOCUSED") == popup)
-        KeyPress(ImGuiKey_Enter);
 }
 
 static ImGuiTableColumn* HelperTableFindColumnByName(ImGuiTable* table, const char* name)
@@ -3782,18 +3641,7 @@ void ImGuiTestContext::TableOpenContextMenu(ImGuiTestRef ref, int column_n)
 
     if (column_n == -1)
         column_n = table->RightMostEnabledColumn;
-
-    IM_CHECK(column_n >= 0 && column_n <= table->ColumnsCount);
-    ImGuiTableColumn* column = &table->Columns[column_n];
-    IM_CHECK_SILENT(column->IsEnabled);
-
-    ImGuiID header_id = TableGetHeaderID(table, column_n);
-
-    // Make visible
-    if (!ItemExists(header_id))
-        ScrollToPosX(table->InnerWindow->ID, (column->MinX + column->MaxX) * 0.5f);
-
-    ItemClick(header_id, ImGuiMouseButton_Right);
+    ItemClick(TableGetHeaderID(table, column_n), ImGuiMouseButton_Right);
     Yield();
 }
 
@@ -3810,45 +3658,11 @@ ImGuiSortDirection ImGuiTestContext::TableClickHeader(ImGuiTestRef ref, const ch
     if (key_mods != ImGuiMod_None)
         KeyDown(key_mods);
 
-    ImGuiID header_id = TableGetHeaderID(table, label);
-
-    // Make visible
-    if (!ItemExists(header_id))
-        ScrollToPosX(table->InnerWindow->ID, (column->MinX + column->MaxX) * 0.5f);
-
-    ItemClick(header_id, ImGuiMouseButton_Left);
+    ItemClick(TableGetHeaderID(table, label), ImGuiMouseButton_Left);
 
     if (key_mods != ImGuiMod_None)
         KeyUp(key_mods);
     return (ImGuiSortDirection)column->SortDirection;
-}
-
-void ImGuiTestContext::TableSetColumnEnabled(ImGuiTestRef ref, int column_n, bool enabled)
-{
-    if (IsError())
-        return;
-
-    IMGUI_TEST_CONTEXT_REGISTER_DEPTH(this);
-    ImGuiTestRefDesc desc(ref);
-    LogDebug("TableSetColumnEnabled %s idx %d enabled = %d", desc.c_str(), column_n, enabled);
-
-    ImGuiTable* table = ImGui::TableFindByID(GetID(ref));
-    IM_CHECK_SILENT(table != NULL);
-    IM_CHECK_SILENT(column_n >= 0 && column_n < table->ColumnsCount);
-    IM_CHECK_SILENT(table->Flags & ImGuiTableFlags_Hideable);
-    ImGuiTableColumn* column = &table->Columns[column_n];
-    int menu_column_n = column->IsEnabled ? table->Columns.index_from_ptr(column) : -1;
-    TableOpenContextMenu(ref, menu_column_n);
-
-    ImGuiTestRef backup_ref = GetRef();
-    SetRef("//$FOCUSED");
-    const char* label = ImGui::TableGetColumnName(table, column_n);
-    if (enabled)
-        ItemCheck(label);
-    else
-        ItemUncheck(label);
-    PopupCloseOne();
-    SetRef(backup_ref);
 }
 
 void ImGuiTestContext::TableSetColumnEnabled(ImGuiTestRef ref, const char* label, bool enabled)
@@ -3860,11 +3674,7 @@ void ImGuiTestContext::TableSetColumnEnabled(ImGuiTestRef ref, const char* label
     ImGuiTestRefDesc desc(ref);
     LogDebug("TableSetColumnEnabled %s label '%s' enabled = %d", desc.c_str(), label, enabled);
 
-    ImGuiTable* table = ImGui::TableFindByID(GetID(ref));
-    IM_CHECK_SILENT(table != NULL);
-    ImGuiTableColumn* column = HelperTableFindColumnByName(table, label);
-    int column_n = column->IsEnabled ? table->Columns.index_from_ptr(column) : -1;
-    TableOpenContextMenu(ref, column_n);
+    TableOpenContextMenu(ref);
 
     ImGuiTestRef backup_ref = GetRef();
     SetRef("//$FOCUSED");
@@ -4000,12 +3810,8 @@ void    ImGuiTestContext::WindowBringToFront(ImGuiTestRef ref, ImGuiTestOpFlags 
     }
     else if (window->RootWindow != g.Windows.back()->RootWindow)
     {
-        ImGuiWindow* blocking_modal = ImGui::FindBlockingModal(window);
         LogDebug("BringWindowToDisplayFront('%s') (window.back=%s)", window->Name, g.Windows.back()->Name);
-        if (blocking_modal == NULL)
-            ImGui::BringWindowToDisplayFront(window); // FIXME-TESTS-NOT_SAME_AS_END_USER: This is not an actually possible action for end-user.
-        else
-            ImGui::BringWindowToDisplayBehind(window, blocking_modal);
+        ImGui::BringWindowToDisplayFront(window); // FIXME-TESTS-NOT_SAME_AS_END_USER: This is not an actually possible action for end-user.
         Yield(2);
     }
 
@@ -4035,8 +3841,6 @@ void    ImGuiTestContext::WindowMove(ImGuiTestRef ref, ImVec2 input_pos, ImVec2 
 
     if ((flags & ImGuiTestOpFlags_NoFocusWindow) == 0)
         WindowFocus(window->ID);
-    else
-        WindowBringToFront(window->ID, ImGuiTestOpFlags_NoFocusWindow);
     WindowCollapse(window->ID, false);
 
     MouseSetViewport(window);
@@ -4063,8 +3867,6 @@ void    ImGuiTestContext::WindowMove(ImGuiTestRef ref, ImVec2 input_pos, ImVec2 
     MouseSetViewport(window); // Update in case window has changed viewport
 }
 
-// Pass == 0.0f on an axis to preserve current size.
-// Pass <  0.0f on an axis to auto-resize.
 void    ImGuiTestContext::WindowResize(ImGuiTestRef ref, ImVec2 size)
 {
     if (IsError())
@@ -4072,9 +3874,7 @@ void    ImGuiTestContext::WindowResize(ImGuiTestRef ref, ImVec2 size)
 
     ImGuiWindow* window = GetWindowByRef(ref);
     IM_CHECK_SILENT(window != nullptr);
-
-    size.x = (size.x == 0.0f) ? window->Size.x : ImFloor(size.x);
-    size.y = (size.y == 0.0f) ? window->Size.y : ImFloor(size.y);
+    size = ImFloor(size);
 
     IMGUI_TEST_CONTEXT_REGISTER_DEPTH(this);
     LogDebug("WindowResize '%s' (%.1f,%.1f)", window->Name, size.x, size.y);
@@ -4098,30 +3898,20 @@ void    ImGuiTestContext::WindowResize(ImGuiTestRef ref, ImVec2 size)
         id = border_x2;
     else
         id = resize_br;
+    MouseMove(id, ImGuiTestOpFlags_IsSecondAttempt);
 
     if (size.x <= 0.0f || size.y <= 0.0f)
     {
         IM_ASSERT(size.x <= 0.0f && size.y <= 0.0f);
-        MouseMove(id, ImGuiTestOpFlags_IsSecondAttempt);
         MouseDoubleClick(0);
         Yield();
     }
     else
     {
-        if (id == resize_br)
-        {
-            MouseMove(id, ImGuiTestOpFlags_IsSecondAttempt);
-        }
-        else
-        {
-            // Resize grip easily covers borders
-            MouseMove(id, ImGuiTestOpFlags_IsSecondAttempt | ImGuiTestOpFlags_NoCheckHoveredId);
-            IM_CHECK(UiContext->HoveredId == id || UiContext->HoveredId == resize_br); // Either is fine
-        }
         MouseDown(0);
         ImVec2 delta = size - window->Size;
         MouseMoveToPos(Inputs->MousePosValue + delta);
-        Yield(); // At this point we don't guarantee the final size! Constraint may apply.
+        Yield(); // At this point we don't guarantee the final size!
         MouseUp();
     }
     MouseSetViewport(window); // Update in case window has changed viewport
@@ -4346,7 +4136,7 @@ void    ImGuiTestContext::DockClear(const char* window_name, ...)
     }
     va_end(args);
 
-    if (ActiveFunc != ImGuiTestActiveFunc_GuiFunc)
+    if (ActiveFunc == ImGuiTestActiveFunc_TestFunc)
         Yield(2); // Give time to rebuild dock in case io.ConfigDockingAlwaysTabBar is set
 }
 
